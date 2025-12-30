@@ -60,8 +60,8 @@ type RateState = { windowStartMs: number; count: number };
 const RATE: Map<string, RateState> = new Map();
 
 function assertRateLimited(event: H3Event, authToken: string) {
-  const max = Number(process.env.MCP_RATE_LIMIT_MAX ?? "3");
-  const windowSec = Number(process.env.MCP_RATE_LIMIT_WINDOW_SEC ?? "3600");
+  const max = Number(process.env.MCP_RATE_LIMIT_MAX ?? "100");
+  const windowSec = Number(process.env.MCP_RATE_LIMIT_WINDOW_SEC ?? "60");
   const windowMs = Math.max(1, windowSec) * 1000;
 
   const ip =
