@@ -16,6 +16,6 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["api/**/*.ts", "src/**/*.ts"],
+  "include": ["routes/**/*.ts", "src/**/*.ts", "nitro.config.ts"],
   "exclude": ["node_modules", "dist"]
 }
