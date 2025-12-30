@@ -68,9 +68,13 @@ function getGitHubToken(): string {
 }
 
 function getGitHubHeaders(): Record<string, string> {
+  const token = getGitHubToken();
+  // Classic PATs start with ghp_, use "token" prefix
+  // Fine-grained tokens and GitHub App tokens use "Bearer"
+  const authPrefix = token.startsWith("ghp_") ? "token" : "Bearer";
   return {
     Accept: "application/vnd.github.v3+json",
-    Authorization: `Bearer ${getGitHubToken()}`,
+    Authorization: `${authPrefix} ${token}`,
     "User-Agent": "frontends-mcp-server",
     "X-GitHub-Api-Version": "2022-11-28",
   };
@@ -112,7 +116,7 @@ async function createRepo(options: GitHubRepoOptions): Promise<EnsureRepoResult>
     name: repo,
     description: description ?? "Shopware Frontends storefront",
     private: isPrivate,
-    auto_init: false, // We'll push our own files
+    auto_init: true, // Initialize with README so Git Data API works
   };
 
   const res = await fetch(endpoint, {

@@ -40,7 +40,9 @@ function getGitHubHeaders(): Record<string, string> {
     "User-Agent": "frontends-mcp-server",
   };
   if (token) {
-    headers.Authorization = `Bearer ${token}`;
+    // Classic PATs start with ghp_, use "token" prefix
+    // Fine-grained tokens and GitHub App tokens use "Bearer"
+    headers.Authorization = token.startsWith("ghp_") ? `token ${token}` : `Bearer ${token}`;
   }
   return headers;
 }
