@@ -1,4 +1,19 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "version": 2
+  "version": 2,
+  "functions": {
+    "api/server.ts": {
+      "maxDuration": 60
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/mcp",
+      "destination": "/api/server"
+    },
+    {
+      "source": "/mcp/:path*",
+      "destination": "/api/server"
+    }
+  ]
 }

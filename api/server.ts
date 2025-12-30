@@ -1,5 +1,8 @@
 import { z } from "zod";
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createStoreAndDeploy } from "../src/tools/createStoreAndDeploy";
 import { extractUnoColorTokensFromSource, fetchUnoConfigFromGitHub } from "../src/lib/unoTokens";
 import { describeBaseTemplate } from "../src/lib/templateInspect";
@@ -24,16 +27,21 @@ import { describePackages } from "../src/lib/packagesInspect";
  *   (fallback) X-MCP-Key: <MCP_AUTH_TOKEN>
  */
 
-function getHeader(req: any, name: string): string | undefined {
+function getHeader(req: VercelRequest, name: string): string | undefined {
   const h = req?.headers ?? {};
   const direct = h[name] ?? h[name.toLowerCase()];
   return typeof direct === "string" ? direct : undefined;
 }
 
-function assertAuthorized(req: any) {
+interface HttpError extends Error {
+  statusCode?: number;
+  meta?: Record<string, unknown>;
+}
+
+function assertAuthorized(req: VercelRequest) {
   const expected = process.env.MCP_AUTH_TOKEN;
   if (!expected) {
-    const err: any = new Error("MCP_AUTH_TOKEN is not set on the server");
+    const err: HttpError = new Error("MCP_AUTH_TOKEN is not set on the server");
     err.statusCode = 500;
     throw err;
   }
@@ -45,7 +53,7 @@ function assertAuthorized(req: any) {
   const provided = bearer || xKey?.trim();
 
   if (!provided || provided !== expected) {
-    const err: any = new Error("Unauthorized");
+    const err: HttpError = new Error("Unauthorized");
     err.statusCode = 401;
     throw err;
   }
@@ -59,7 +67,7 @@ type RateState = { windowStartMs: number; count: number };
 // Note: On Vercel serverless, memory is not shared across instances. This still blocks bursts.
 const RATE: Map<string, RateState> = new Map();
 
-function assertRateLimited(req: any, authToken: string) {
+function assertRateLimited(req: VercelRequest, authToken: string) {
   const max = Number(process.env.MCP_RATE_LIMIT_MAX ?? "3");
   const windowSec = Number(process.env.MCP_RATE_LIMIT_WINDOW_SEC ?? "3600");
   const windowMs = Math.max(1, windowSec) * 1000;
@@ -79,7 +87,7 @@ function assertRateLimited(req: any, authToken: string) {
   }
 
   if (state.count >= max) {
-    const err: any = new Error("Rate limit exceeded");
+    const err: HttpError = new Error("Rate limit exceeded");
     err.statusCode = 429;
     err.meta = {
       limit: max,
@@ -97,7 +105,7 @@ function assertRateLimited(req: any, authToken: string) {
 function assertOwnerAllowed(owner: string) {
   const raw = process.env.MCP_ALLOWED_OWNERS;
   if (!raw) {
-    const err: any = new Error("MCP_ALLOWED_OWNERS is not set on the server");
+    const err: HttpError = new Error("MCP_ALLOWED_OWNERS is not set on the server");
     err.statusCode = 500;
     throw err;
   }
@@ -108,18 +116,18 @@ function assertOwnerAllowed(owner: string) {
     .filter(Boolean);
 
   if (!allowed.includes(owner)) {
-    const err: any = new Error(`Owner not allowed: ${owner}`);
+    const err: HttpError = new Error(`Owner not allowed: ${owner}`);
     err.statusCode = 403;
     throw err;
   }
 }
 
-function auditLog(event: string, payload: Record<string, any>) {
+function auditLog(event: string, payload: Record<string, unknown>) {
   // Structured logs: easy to filter in Vercel logs
   console.log(JSON.stringify({ ts: new Date().toISOString(), event, ...payload }));
 }
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   const requestId =
     getHeader(req, "x-request-id") ||
     getHeader(req, "x-vercel-id") ||
@@ -137,19 +145,20 @@ export default async function handler(req: any, res: any) {
       path: req?.url,
       method: req?.method,
     });
-  } catch (e: any) {
-    const status = e?.statusCode ?? 401;
+  } catch (e: unknown) {
+    const err = e as HttpError;
+    const status = err?.statusCode ?? 401;
     if (status === 429) {
-      const retryAfter = e?.meta?.retryAfterSec ?? 60;
+      const retryAfter = (err?.meta?.retryAfterSec as number) ?? 60;
       res.setHeader("Retry-After", String(retryAfter));
     }
     auditLog("mcp.request.denied", {
       requestId,
       status,
-      message: e?.message ?? "Unauthorized",
-      meta: e?.meta,
+      message: err?.message ?? "Unauthorized",
+      meta: err?.meta,
     });
-    res.status(status).send(e?.message ?? "Unauthorized");
+    res.status(status).send(err?.message ?? "Unauthorized");
     return;
   }
 
@@ -469,7 +478,8 @@ server.tool(
         });
 
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      } catch (err: any) {
+      } catch (e: unknown) {
+        const err = e as Error;
         auditLog("mcp.tool.error", {
           requestId,
           tool: "create_store_and_deploy",
@@ -483,7 +493,17 @@ server.tool(
     }
   );
 
-  // Depending on MCP template/version, adapt transport here.
-  // @ts-ignore
-  return server.handleHttp(req, res);
+  // Create transport for this request (stateless mode for serverless)
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined, // Stateless mode for Vercel serverless
+  });
+
+  // Connect server to transport
+  await server.connect(transport);
+
+  // Handle the HTTP request (cast to base types for MCP SDK compatibility)
+  await transport.handleRequest(
+    req as unknown as IncomingMessage,
+    res as unknown as ServerResponse
+  );
 }
