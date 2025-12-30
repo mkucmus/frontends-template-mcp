@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { defineEventHandler, getHeader, setResponseHeader, setResponseStatus, send, H3Event } from "h3";
+import { defineEventHandler, getHeader, setResponseHeader, setResponseStatus, send, type H3Event } from "h3";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createStoreAndDeploy } from "../../src/tools/createStoreAndDeploy";

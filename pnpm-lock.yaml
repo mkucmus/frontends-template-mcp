@@ -11,6 +11,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.0
         version: 1.25.1(hono@4.11.3)(zod@3.25.76)
+      h3:
+        specifier: ^1.13.0
+        version: 1.15.4
       zod:
         specifier: ^3.23.0
         version: 3.25.76
