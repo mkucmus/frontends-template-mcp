@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "dev": "vercel dev",
-    "build": "tsc"
+    "build": "tsc",
+    "deploy": "vercel",
+    "deploy:prod": "vercel --prod"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
@@ -13,6 +15,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vercel": "^39.0.0"
   }
 }
