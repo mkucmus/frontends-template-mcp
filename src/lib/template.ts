@@ -147,7 +147,39 @@ async function fetchDirectoryRecursive(
 }
 
 /**
+ * Merge two file arrays - files from 'override' take precedence
+ */
+function mergeFiles(base: TemplateFile[], override: TemplateFile[]): TemplateFile[] {
+  const fileMap = new Map<string, TemplateFile>();
+
+  // Add base files first
+  for (const file of base) {
+    fileMap.set(file.path, file);
+  }
+
+  // Override with extended files
+  for (const file of override) {
+    fileMap.set(file.path, file);
+  }
+
+  return Array.from(fileMap.values());
+}
+
+/**
+ * Fix nuxt.config.ts to remove local extends reference
+ * The extended template uses extends: ["../vue-starter-template"] which doesn't work standalone
+ */
+function fixNuxtConfig(content: string): string {
+  // Remove the extends line that references local path
+  return content.replace(
+    /extends:\s*\[["']\.\.\/vue-starter-template["']\],?\s*\n?/g,
+    ""
+  );
+}
+
+/**
  * Fetch a Shopware Frontends template from GitHub
+ * For vue-starter-template-extended, fetches both base and extended templates and merges them
  * Returns all files as an array with path and content
  */
 export async function fetchTemplate(
@@ -155,9 +187,30 @@ export async function fetchTemplate(
 ): Promise<FetchTemplateResult> {
   const template = options.template ?? "vue-starter-template-extended";
   const ref = options.ref ?? "main";
-  const templatePath = `templates/${template}`;
 
-  const files = await fetchDirectoryRecursive(templatePath, ref);
+  let files: TemplateFile[];
+
+  if (template === "vue-starter-template-extended") {
+    // Fetch both templates and merge (extended overrides base)
+    const [baseFiles, extendedFiles] = await Promise.all([
+      fetchDirectoryRecursive("templates/vue-starter-template", ref),
+      fetchDirectoryRecursive("templates/vue-starter-template-extended", ref),
+    ]);
+
+    files = mergeFiles(baseFiles, extendedFiles);
+
+    // Fix nuxt.config.ts to remove the extends reference
+    const nuxtConfigIndex = files.findIndex(f => f.path === "nuxt.config.ts");
+    if (nuxtConfigIndex !== -1) {
+      files[nuxtConfigIndex] = {
+        ...files[nuxtConfigIndex],
+        content: fixNuxtConfig(files[nuxtConfigIndex].content),
+      };
+    }
+  } else {
+    // Just fetch the base template
+    files = await fetchDirectoryRecursive(`templates/${template}`, ref);
+  }
 
   return {
     files,
