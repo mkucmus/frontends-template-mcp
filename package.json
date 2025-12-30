@@ -3,7 +3,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vercel dev",
     "build": "tsc",
     "deploy": "vercel",
     "deploy:prod": "vercel --prod"
